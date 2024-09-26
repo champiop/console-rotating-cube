@@ -11,8 +11,11 @@ GEOMETRY = cube
 
 all: cube
 
-cube: $(OBJ_FILES)
+cube: obj $(OBJ_FILES)
 	$(LD) $(OBJ_FILES) $(LDFLAGS) -o $@
+
+obj:
+	mkdir obj -p
 
 obj/%.o: src/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -20,7 +23,7 @@ obj/%.o: src/%.c
 .PHONY: clean
 
 clean:
-	rm -rf cube $(OBJ_FILES)
+	rm -rf cube obj
 
 build: cube
 
