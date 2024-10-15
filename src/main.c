@@ -15,7 +15,8 @@
 #define PURPLE "\033[0;35m"
 #define CYAN "\033[0;36m"
 
-const char CHARS[] = {' ', '*', '#', '@'};
+const char CHARS[] = {' ', '.', '\'', '`', '^', '"', ',', ':', ';', 'I', 'l', '!', 'i', '>', '<', '~', '+', '_', '-', '?', ']', '[', '}', '{', '1', ')', '(', '|', '\\', '/', 't', 'f', 'j', 'r', 'x', 'n', 'u', 'v', 'c', 'z', 'X', 'Y', 'U', 'J', 'C', 'L', 'Q', '0', 'O', 'Z', 'm', 'w', 'q', 'p', 'd', 'b', 'k', 'h', 'a', 'o', '*', '#', 'M', 'W', '&', '8', '%', 'B', '@', '$'};
+const COLOR_COUNT = 70;
 
 #define SWAP(x, y) \
     {              \
@@ -32,10 +33,15 @@ typedef struct Vec3
     float w;
 } Vec3;
 
+typedef struct Vertex
+{
+    Vec3 pos;
+    float color;
+} Vertex;
+
 typedef struct Triangle
 {
-    Vec3 vertices[3];
-    int color;
+    Vertex vertices[3];
 } Triangle;
 
 typedef struct Matrix
@@ -47,7 +53,7 @@ typedef struct Screen
 {
     int width;
     int height;
-    char *buffer;
+    int *buffer;
     float *z_buffer;
     float far;
 } Screen;
@@ -159,6 +165,11 @@ float crossProductZ(Vec3 v1,
     return v1.x * v2.y - v1.y * v2.x;
 }
 
+float interpolate(float start, float end, float t)
+{
+    return start * (1.0f - t) + end * t;
+}
+
 void drawPixel(Screen s, int x, int y, float z, int color)
 {
     if (x >= 0 && x < s.width && y >= 0 && y < s.height)
@@ -171,9 +182,9 @@ void drawPixel(Screen s, int x, int y, float z, int color)
     }
 }
 
-void drawLine(Screen s, int x0, int y0, float z0, int x1, int y1, float z1, int color)
+void drawLine(Screen s, int x0, int y0, float z0, int x1, int y1, float z1, int color0, int color1)
 {
-    int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
+    int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i, cs, ce, c;
     dx = x1 - x0;
     dy = y1 - y0;
     dx1 = abs(dx);
@@ -191,19 +202,23 @@ void drawLine(Screen s, int x0, int y0, float z0, int x1, int y1, float z1, int 
             x = x0;
             y = y0;
             zs = z0;
+            cs = color0;
             ze = z1;
             xe = x1;
+            ce = color1;
         }
         else
         {
             x = x1;
             y = y1;
             zs = z1;
+            cs = color1;
             ze = z0;
             xe = x0;
+            ce = color0;
         }
 
-        drawPixel(s, x, y, zs, color);
+        drawPixel(s, x, y, zs, cs);
 
         for (i = 0; x < xe; i++)
         {
@@ -222,8 +237,9 @@ void drawLine(Screen s, int x0, int y0, float z0, int x1, int y1, float z1, int 
 
                 px = px + 2 * (dy1 - dx1);
             }
-            z = (1.0f / zs) * (1.0f - t) + (1.0f / ze) * t;
-            drawPixel(s, x, y, 1.0f / z, color);
+            z = interpolate(1 / zs, 1 / ze, t);
+            c = interpolate(cs, ce, t);
+            drawPixel(s, x, y, 1.0f / z, c);
         }
     }
     else
@@ -233,19 +249,23 @@ void drawLine(Screen s, int x0, int y0, float z0, int x1, int y1, float z1, int 
             x = x0;
             y = y0;
             zs = z0;
+            cs = color0;
             ze = z1;
             ye = y1;
+            ce = color1;
         }
         else
         {
             x = x1;
             y = y1;
             zs = z1;
+            cs = color1;
             ze = z0;
             ye = y0;
+            ce = color0;
         }
 
-        drawPixel(s, x, y, zs, color);
+        drawPixel(s, x, y, zs, cs);
 
         for (i = 0; y < ye; i++)
         {
@@ -264,48 +284,55 @@ void drawLine(Screen s, int x0, int y0, float z0, int x1, int y1, float z1, int 
 
                 py = py + 2 * (dx1 - dy1);
             }
-            z = (1.0f / zs) * (1.0f - t) + (1.0f / ze) * t;
-            drawPixel(s, x, y, 1.0f / z, color);
+            z = interpolate(1 / zs, 1 / ze, t);
+            c = interpolate(cs, ce, t);
+            drawPixel(s, x, y, 1.0f / z, c);
         }
     }
 }
 
 void drawTriangle(Screen s, Triangle t)
 {
-    drawLine(s, t.vertices[0].x, t.vertices[0].y, t.vertices[0].z, t.vertices[1].x, t.vertices[1].y, t.vertices[1].z, t.color);
-    drawLine(s, t.vertices[1].x, t.vertices[1].y, t.vertices[1].z, t.vertices[2].x, t.vertices[2].y, t.vertices[2].z, t.color);
-    drawLine(s, t.vertices[2].x, t.vertices[2].y, t.vertices[2].z, t.vertices[0].x, t.vertices[0].y, t.vertices[0].z, t.color);
+    drawLine(s, t.vertices[0].pos.x, t.vertices[0].pos.y, t.vertices[0].pos.z, t.vertices[1].pos.x, t.vertices[1].pos.y, t.vertices[1].pos.z, t.vertices[0].color, t.vertices[1].color);
+    drawLine(s, t.vertices[1].pos.x, t.vertices[1].pos.y, t.vertices[1].pos.z, t.vertices[2].pos.x, t.vertices[2].pos.y, t.vertices[2].pos.z, t.vertices[1].color, t.vertices[2].color);
+    drawLine(s, t.vertices[2].pos.x, t.vertices[2].pos.y, t.vertices[2].pos.z, t.vertices[0].pos.x, t.vertices[0].pos.y, t.vertices[0].pos.z, t.vertices[2].color, t.vertices[0].color);
 }
 
 void fillTriangle(Screen s, Triangle t)
 {
-    int x0 = t.vertices[0].x;
-    int y0 = t.vertices[0].y;
-    float z0 = t.vertices[0].z;
-    int x1 = t.vertices[1].x;
-    int y1 = t.vertices[1].y;
-    float z1 = t.vertices[1].z;
-    int x2 = t.vertices[2].x;
-    int y2 = t.vertices[2].y;
-    float z2 = t.vertices[2].z;
+    int x0 = t.vertices[0].pos.x;
+    int y0 = t.vertices[0].pos.y;
+    float z0 = t.vertices[0].pos.z;
+    int c0 = t.vertices[0].color;
+    int x1 = t.vertices[1].pos.x;
+    int y1 = t.vertices[1].pos.y;
+    float z1 = t.vertices[1].pos.z;
+    int c1 = t.vertices[1].color;
+    int x2 = t.vertices[2].pos.x;
+    int y2 = t.vertices[2].pos.y;
+    float z2 = t.vertices[2].pos.z;
+    int c2 = t.vertices[2].color;
 
     if (y0 > y1)
     {
         SWAP(y0, y1);
         SWAP(x0, x1);
         SWAP(z0, z1);
+        SWAP(c0, c1);
     }
     if (y0 > y2)
     {
         SWAP(y0, y2);
         SWAP(x0, x2);
         SWAP(z0, z2);
+        SWAP(c0, c2);
     }
     if (y1 > y2)
     {
         SWAP(y1, y2);
         SWAP(x1, x2);
         SWAP(z1, z2);
+        SWAP(c1, c2);
     }
 
     int x_1, dx_1, dy_1, dx1_1, dy1_1, px_1, py_1, dirx_1, changed_1;
@@ -333,7 +360,7 @@ void fillTriangle(Screen s, Triangle t)
     x_1 = x0;
     x_2 = x0;
 
-    float z_1, z_2, t_1, t_2;
+    float z_1, z_2, t_1, t_2, c_1, c_2;
     t_1 = 0;
     t_2 = 0;
 
@@ -352,7 +379,8 @@ void fillTriangle(Screen s, Triangle t)
                     px_1 = px_1 + 2 * (dy1_1 - dx1_1);
                     changed_1 = 1;
                 }
-                z_1 = (1.0f / z0) * (1.0f - t_1) + (1.0f / z1) * t_1;
+                z_1 = interpolate(1 / z0, 1 / z1, t_1);
+                c_1 = interpolate(c0, c1, t_1);
                 t_1 += 1.0f / dx1_1;
                 x_1 += dirx_1;
             }
@@ -368,7 +396,8 @@ void fillTriangle(Screen s, Triangle t)
 
                     py_1 = py_1 + 2 * (dx1_1 - dy1_1);
                 }
-                z_1 = (1.0f / z0) * (1.0f - t_1) + (1.0f / z1) * t_1;
+                z_1 = interpolate(1 / z0, 1 / z1, t_1);
+                c_1 = interpolate(c0, c1, t_1);
                 t_1 += 1.0f / dy1_1;
                 changed_1 = 1;
             }
@@ -387,7 +416,8 @@ void fillTriangle(Screen s, Triangle t)
                     px_2 = px_2 + 2 * (dy1_2 - dx1_2);
                     changed_2 = 1;
                 }
-                z_2 = (1.0f / z0) * (1.0f - t_2) + (1.0f / z2) * t_2;
+                z_2 = interpolate(1 / z0, 1 / z2, t_2);
+                c_2 = interpolate(c0, c2, t_2);
                 t_2 += 1.0f / dx1_2;
                 x_2 += dirx_2;
             }
@@ -403,7 +433,8 @@ void fillTriangle(Screen s, Triangle t)
 
                     py_2 = py_2 + 2 * (dx1_2 - dy1_2);
                 }
-                z_2 = (1.0f / z0) * (1.0f - t_2) + (1.0f / z2) * t_2;
+                z_2 = interpolate(1 / z0, 1 / z2, t_2);
+                c_2 = interpolate(c0, c2, t_2);
                 t_2 += 1.0f / dy1_2;
                 changed_2 = 1;
             }
@@ -411,7 +442,7 @@ void fillTriangle(Screen s, Triangle t)
 
         changed_1 = 0;
         changed_2 = 0;
-        drawLine(s, x_1, y, 1.0f / z_1, x_2, y, 1.0f / z_2, t.color);
+        drawLine(s, x_1, y, 1.0f / z_1, x_2, y, 1.0f / z_2, c_1, c_2);
     }
 
     dx_1 = x2 - x1;
@@ -441,7 +472,8 @@ void fillTriangle(Screen s, Triangle t)
                     px_1 = px_1 + 2 * (dy1_1 - dx1_1);
                     changed_1 = 1;
                 }
-                z_1 = (1.0f / z1) * (1.0f - t_1) + (1.0f / z2) * t_1;
+                z_1 = interpolate(1 / z1, 1 / z2, t_1);
+                c_1 = interpolate(c1, c2, t_1);
                 t_1 += 1.0f / dx1_1;
                 x_1 += dirx_1;
             }
@@ -457,7 +489,8 @@ void fillTriangle(Screen s, Triangle t)
 
                     py_1 = py_1 + 2 * (dx1_1 - dy1_1);
                 }
-                z_1 = (1.0f / z1) * (1.0f - t_1) + (1.0f / z2) * t_1;
+                z_1 = interpolate(1 / z1, 1 / z2, t_1);
+                c_1 = interpolate(c1, c2, t_1);
                 t_1 += 1.0f / dy1_1;
                 changed_1 = 1;
             }
@@ -476,7 +509,8 @@ void fillTriangle(Screen s, Triangle t)
                     px_2 = px_2 + 2 * (dy1_2 - dx1_2);
                     changed_2 = 1;
                 }
-                z_2 = (1.0f / z0) * (1.0f - t_2) + (1.0f / z2) * t_2;
+                z_2 = interpolate(1 / z0, 1 / z2, t_2);
+                c_2 = interpolate(c0, c2, t_2);
                 t_2 += 1.0f / dx1_2;
                 x_2 += dirx_2;
             }
@@ -492,7 +526,8 @@ void fillTriangle(Screen s, Triangle t)
 
                     py_2 = py_2 + 2 * (dx1_2 - dy1_2);
                 }
-                z_2 = (1.0f / z0) * (1.0f - t_2) + (1.0f / z2) * t_2;
+                z_2 = interpolate(1 / z0, 1 / z2, t_2);
+                c_2 = interpolate(c0, c2, t_2);
                 t_2 += 1.0f / dy1_2;
                 changed_2 = 1;
             }
@@ -500,7 +535,7 @@ void fillTriangle(Screen s, Triangle t)
 
         changed_1 = 0;
         changed_2 = 0;
-        drawLine(s, x_1, y, 1.0f / z_1, x_2, y, 1.0f / z_2, t.color);
+        drawLine(s, x_1, y, 1.0f / z_1, x_2, y, 1.0f / z_2, c_1, c_2);
     }
 }
 
@@ -523,80 +558,53 @@ void display(Screen s)
     {
         for (int x = 0; x < s.width; x++)
         {
-            char c = ']';
-            switch (s.buffer[y * s.width + x])
-            {
-            case 0:
-                printf("  ");
-                break;
-
-            case 1:
-                printf("%s%c%c", RED, c, c);
-                break;
-
-            case 2:
-                printf("%s%c%c", GREEN, c, c);
-                break;
-
-            case 3:
-                printf("%s%c%c", BLUE, c, c);
-                break;
-
-            case 4:
-                printf("%s%c%c", YELLOW, c, c);
-                break;
-
-            case 5:
-                printf("%s%c%c", PURPLE, c, c);
-                break;
-
-            case 6:
-                printf("%s%c%c", CYAN, c, c);
-                break;
-
-            default:
-                break;
-            }
+            char c = CHARS[s.buffer[y * s.width + x]];
+            printf("%c%c", c, c);
         }
         printf("\n");
     }
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc != 2)
+    {
+        printf("usage: ./cube <path_to_geometry>");
+        exit(1);
+    }
+
     Screen screen;
     screen.width = 100;
     screen.height = 100;
-    screen.buffer = malloc(screen.width * screen.height * sizeof(char));
+    screen.buffer = malloc(screen.width * screen.height * sizeof(int));
     screen.z_buffer = malloc(screen.width * screen.height * sizeof(float));
-    screen.far = 100.0f;
+    screen.far = 50.0f;
     clear(screen);
 
-    Triangle cube[12] = {
-        {{{-0.8f, -0.8f, -0.8f, 1.0f}, {-0.8f, 0.8f, -0.8f, 1.0f}, {0.8, 0.8, -0.8f, 1.0f}}, 1},
-        {{{-0.8f, -0.8f, -0.8f, 1.0f}, {0.8, 0.8, -0.8f, 1.0f}, {0.8, -0.8f, -0.8f, 1.0f}}, 1},
+    FILE *file;
+    file = fopen(argv[1], "r");
 
-        {{{0.8, -0.8f, -0.8f, 1.0f}, {0.8, 0.8, -0.8f, 1.0f}, {0.8, 0.8, 0.8, 1.0f}}, 2},
-        {{{0.8, -0.8f, -0.8f, 1.0f}, {0.8, 0.8, 0.8, 1.0f}, {0.8, -0.8f, 0.8, 1.0f}}, 2},
+    int triangleCount;
+    fscanf(file, "%d", &triangleCount);
 
-        {{{0.8, -0.8f, 0.8, 1.0f}, {0.8, 0.8, 0.8, 1.0f}, {-0.8f, 0.8, 0.8, 1.0f}}, 3},
-        {{{0.8, -0.8f, 0.8, 1.0f}, {-0.8f, 0.8, 0.8, 1.0f}, {-0.8f, -0.8f, 0.8, 1.0f}}, 3},
+    Triangle *geometry = malloc(triangleCount * sizeof(Triangle));
+    for (int i = 0; i < triangleCount; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            fscanf(file, "%f %f %f %f", &geometry[i].vertices[j].pos.x, &geometry[i].vertices[j].pos.y, &geometry[i].vertices[j].pos.z, &geometry[i].vertices[j].color);
+            geometry[i].vertices[j].pos.w = 1.0f;
+        }
+    }
 
-        {{{-0.8f, -0.8f, 0.8, 1.0f}, {-0.8f, 0.8, 0.8, 1.0f}, {-0.8f, 0.8, -0.8f, 1.0f}}, 4},
-        {{{-0.8f, -0.8f, 0.8, 1.0f}, {-0.8f, 0.8, -0.8f, 1.0f}, {-0.8f, -0.8f, -0.8f, 1.0f}}, 4},
-
-        {{{-0.8f, 0.8, -0.8f, 1.0f}, {-0.8f, 0.8, 0.8, 1.0f}, {0.8, 0.8, 0.8, 1.0f}}, 5},
-        {{{-0.8f, 0.8, -0.8f, 1.0f}, {0.8, 0.8, 0.8, 1.0f}, {0.8, 0.8, -0.8f, 1.0f}}, 5},
-
-        {{{0.8, -0.8f, 0.8, 1.0f}, {-0.8f, -0.8f, 0.8, 1.0f}, {-0.8f, -0.8f, -0.8f, 1.0f}}, 6},
-        {{{0.8, -0.8f, 0.8, 1.0f}, {-0.8f, -0.8f, -0.8f, 1.0f}, {0.8, -0.8f, -0.8f, 1.0f}}, 6},
-    };
+    fclose(file);
 
     Matrix projection = createProjectionMatrix(0.1f, screen.far, 90.0f, (float)screen.height / (float)screen.width);
 
     Matrix rotationX, rotationZ;
     float a = 0.0f;
     float b = 0.0f;
+    float cubeZ = 2.0f;
 
     while (1)
     {
@@ -605,33 +613,35 @@ int main()
         rotationX = createRotationXMatrix(a);
         rotationZ = createRotationZMatrix(b);
 
-        Triangle rotated = {{{0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}}, 0};
-        Triangle projected = {{{0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}}, 0};
-        Triangle translated = {{{0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}, {0, 0, 0, 1.0f}}, 0};
+        Triangle rotated = {{{{0, 0, 0, 1.0f}, 0}, {{0, 0, 0, 1.0f}, 0}, {{0, 0, 0, 1.0f}, 0}}};
+        Triangle projected = {{{{0, 0, 0, 1.0f}, 0}, {{0, 0, 0, 1.0f}, 0}, {{0, 0, 0, 1.0f}, 0}}};
+        Triangle translated = {{{{0, 0, 0, 1.0f}, 0}, {{0, 0, 0, 1.0f}, 0}, {{0, 0, 0, 1.0f}, 0}}};
 
-        for (int j = 0; j < 12; j++)
+        for (int j = 0; j < triangleCount; j++)
         {
-            rotated.color = cube[j].color;
-            rotated.vertices[0] = ApplyMatrix(rotationX, cube[j].vertices[0]);
-            rotated.vertices[1] = ApplyMatrix(rotationX, cube[j].vertices[1]);
-            rotated.vertices[2] = ApplyMatrix(rotationX, cube[j].vertices[2]);
-            rotated.vertices[0] = ApplyMatrix(rotationZ, rotated.vertices[0]);
-            rotated.vertices[1] = ApplyMatrix(rotationZ, rotated.vertices[1]);
-            rotated.vertices[2] = ApplyMatrix(rotationZ, rotated.vertices[2]);
+            rotated.vertices[0].color = geometry[j].vertices[0].color;
+            rotated.vertices[1].color = geometry[j].vertices[1].color;
+            rotated.vertices[2].color = geometry[j].vertices[2].color;
+            rotated.vertices[0].pos = ApplyMatrix(rotationX, geometry[j].vertices[0].pos);
+            rotated.vertices[1].pos = ApplyMatrix(rotationX, geometry[j].vertices[1].pos);
+            rotated.vertices[2].pos = ApplyMatrix(rotationX, geometry[j].vertices[2].pos);
+            rotated.vertices[0].pos = ApplyMatrix(rotationZ, rotated.vertices[0].pos);
+            rotated.vertices[1].pos = ApplyMatrix(rotationZ, rotated.vertices[1].pos);
+            rotated.vertices[2].pos = ApplyMatrix(rotationZ, rotated.vertices[2].pos);
 
             translated = rotated;
-            translated.vertices[0].z = rotated.vertices[0].z + 4.0f;
-            translated.vertices[1].z = rotated.vertices[1].z + 4.0f;
-            translated.vertices[2].z = rotated.vertices[2].z + 4.0f;
+            translated.vertices[0].pos.z = rotated.vertices[0].pos.z + cubeZ;
+            translated.vertices[1].pos.z = rotated.vertices[1].pos.z + cubeZ;
+            translated.vertices[2].pos.z = rotated.vertices[2].pos.z + cubeZ;
 
             Vec3 normal, vec1, vec2;
-            vec1.x = translated.vertices[1].x - translated.vertices[0].x;
-            vec1.y = translated.vertices[1].y - translated.vertices[0].y;
-            vec1.z = translated.vertices[1].z - translated.vertices[0].z;
+            vec1.x = translated.vertices[1].pos.x - translated.vertices[0].pos.x;
+            vec1.y = translated.vertices[1].pos.y - translated.vertices[0].pos.y;
+            vec1.z = translated.vertices[1].pos.z - translated.vertices[0].pos.z;
 
-            vec2.x = translated.vertices[2].x - translated.vertices[0].x;
-            vec2.y = translated.vertices[2].y - translated.vertices[0].y;
-            vec2.z = translated.vertices[2].z - translated.vertices[0].z;
+            vec2.x = translated.vertices[2].pos.x - translated.vertices[0].pos.x;
+            vec2.y = translated.vertices[2].pos.y - translated.vertices[0].pos.y;
+            vec2.z = translated.vertices[2].pos.z - translated.vertices[0].pos.z;
 
             normal.x = crossProductX(vec1, vec2);
             normal.y = crossProductY(vec1, vec2);
@@ -644,30 +654,46 @@ int main()
 
             if (normal.z < 0)
             {
-                projected.color = translated.color;
-                projected.vertices[0] = ApplyMatrix(projection, translated.vertices[0]);
-                projected.vertices[1] = ApplyMatrix(projection, translated.vertices[1]);
-                projected.vertices[2] = ApplyMatrix(projection, translated.vertices[2]);
+                Vec3 lightDirection = {.x = sqrtf(2.0f) / 2.0f, .y = 0.0f, .z = sqrtf(2.0f) / 2.0f, .w = 1.0f};
+                float dot = (lightDirection.x * normal.x + lightDirection.y * normal.y + lightDirection.z * normal.z);
 
-                projected.vertices[0].x = (projected.vertices[0].x + 1.0f) * 0.5 * (float)screen.width;
-                projected.vertices[1].x = (projected.vertices[1].x + 1.0f) * 0.5 * (float)screen.width;
-                projected.vertices[2].x = (projected.vertices[2].x + 1.0f) * 0.5 * (float)screen.width;
-                projected.vertices[0].y = (projected.vertices[0].y + 1.0f) * 0.5 * (float)screen.height;
-                projected.vertices[1].y = (projected.vertices[1].y + 1.0f) * 0.5 * (float)screen.height;
-                projected.vertices[2].y = (projected.vertices[2].y + 1.0f) * 0.5 * (float)screen.height;
+                for (int i = 0; i < 3; i++)
+                {
+                    translated.vertices[i].color *= -dot;
+                    if (translated.vertices[i].color <= 0.3)
+                        translated.vertices[i].color = 0.3;
+                }
+
+                projected.vertices[0].color = translated.vertices[0].color * (COLOR_COUNT - 1);
+                projected.vertices[1].color = translated.vertices[1].color * (COLOR_COUNT - 1);
+                projected.vertices[2].color = translated.vertices[2].color * (COLOR_COUNT - 1);
+                projected.vertices[0].pos = ApplyMatrix(projection, translated.vertices[0].pos);
+                projected.vertices[1].pos = ApplyMatrix(projection, translated.vertices[1].pos);
+                projected.vertices[2].pos = ApplyMatrix(projection, translated.vertices[2].pos);
+
+                projected.vertices[0].pos.x = (projected.vertices[0].pos.x + 1.0f) * 0.5 * (float)screen.width;
+                projected.vertices[1].pos.x = (projected.vertices[1].pos.x + 1.0f) * 0.5 * (float)screen.width;
+                projected.vertices[2].pos.x = (projected.vertices[2].pos.x + 1.0f) * 0.5 * (float)screen.width;
+                projected.vertices[0].pos.y = (projected.vertices[0].pos.y + 1.0f) * 0.5 * (float)screen.height;
+                projected.vertices[1].pos.y = (projected.vertices[1].pos.y + 1.0f) * 0.5 * (float)screen.height;
+                projected.vertices[2].pos.y = (projected.vertices[2].pos.y + 1.0f) * 0.5 * (float)screen.height;
 
                 fillTriangle(screen, projected);
             }
 
-            a += 0.005f;
-            b += 0.05f;
+            a += 0.01f;
+            b += 0.008f;
+            cubeZ += 0.02f;
+            if (cubeZ >= screen.far)
+                cubeZ = 2.0f;
         }
 
         display(screen);
 
-        sleep(1);
+        usleep(100000);
     }
 
+    free(geometry);
     free(screen.buffer);
     free(screen.z_buffer);
 
